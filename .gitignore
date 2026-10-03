@@ -5,3 +5,8 @@ artifacts/
 *.jsonl
 
 ASUS Smart Gesture/
+desktop/**/bin/
+desktop/**/obj/
+.vs/
+tools/ui-debugger/bin/
+tools/ui-debugger/obj/

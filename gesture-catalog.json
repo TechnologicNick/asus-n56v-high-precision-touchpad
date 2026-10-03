@@ -1,0 +1,16 @@
+[
+  {"key":"single_tap","index":1,"fingers":1,"label":"Tap to click","description":"ASUS one-finger tap.","default":true},
+  {"key":"double_tap","index":2,"fingers":1,"label":"Double-tap to double-click","description":"ASUS one-finger double tap.","default":true},
+  {"key":"tap_drag","index":3,"fingers":1,"label":"Double-tap and move to drag","description":"Hold the second tap and move your finger.","default":true},
+  {"key":"drag_release","index":4,"fingers":1,"label":"Tap again to release a drag","description":"ASUS drag-lock release behavior.","default":true},
+  {"key":"two_tap","index":5,"fingers":2,"label":"Two-finger tap","description":"ASUS secondary-click gesture.","default":true},
+  {"key":"pan","index":6,"fingers":2,"label":"Two-finger scrolling","description":"Original ASUS scroll handling.","default":true},
+  {"key":"zoom","index":7,"fingers":2,"label":"Pinch-to-zoom","description":"Original ASUS zoom; may use keyboard shortcuts.","default":true},
+  {"key":"rotate","index":8,"fingers":2,"label":"Two-finger rotate","description":"Original ASUS rotation in supported applications.","default":true},
+  {"key":"three_up","index":9,"fingers":3,"label":"Three-finger swipe up","description":"Original ASUS action (typically show running applications).","default":true},
+  {"key":"three_down","index":10,"fingers":3,"label":"Three-finger swipe down","description":"Original ASUS action (typically show desktop).","default":true},
+  {"key":"three_horizontal","index":11,"fingers":3,"label":"Three-finger swipe left / right","description":"Original ASUS application-specific navigation.","default":true},
+  {"key":"edge_top","index":12,"fingers":1,"label":"Swipe from the top edge","description":"Legacy ASUS edge action; Windows 10 support varies.","default":false},
+  {"key":"edge_left","index":13,"fingers":1,"label":"Swipe from the left edge","description":"Legacy ASUS edge action; Windows 10 support varies.","default":false},
+  {"key":"edge_right","index":14,"fingers":1,"label":"Swipe from the right edge","description":"Legacy ASUS edge action; Windows 10 support varies.","default":false}
+]

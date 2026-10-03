@@ -135,6 +135,106 @@ ASUS Smart Gesture or reboot.
 - This does not certify the old physical hardware or make it pass Microsoft's
   Precision Touchpad hardware tests.
 
+## WinUI 3 tray application
+
+Build the unpackaged, self-contained x64 desktop application with the .NET 8
+SDK and Windows desktop/WinUI development components installed:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-desktop.ps1
+```
+
+Launch `artifacts/desktop/N56Precision.exe` and accept the administrator prompt.
+Stop any manually running bridge first: the ASUS feed and virtual endpoint are
+exclusive. The app starts a hidden Python worker using this project's `.venv`.
+Keep the output within this project (or set `N56_BRIDGE_ROOT` to the project).
+`--tray` starts with the settings window hidden. Closing the window hides it;
+click the notification-area icon to reopen it. Right-click to pause/resume or
+exit. Pause and exit stop the worker gracefully and restore ASUS preferences.
+The sidebar separates Overview, Windows gestures, ASUS gestures, Buttons &
+right-click, and Diagnostics. The Buttons page includes a live contact view;
+orange contacts are reserved for buttons and green contacts are in the gesture area.
+If the app crashes, its worker notices the parent process exit and restores
+settings. No driver replacement, startup task, or login registration is added.
+
+All fourteen ASUS gesture settings have switches. Windows forwarding can be
+enabled independently for two, three, four, and five contacts. When Windows
+owns a finger count, ASUS gestures with that count are muted to avoid duplicate
+actions. Their switch choices are remembered, and the UI shows the override.
+The Hybrid preset uses Windows for two/four/five fingers and ASUS for three.
+The switches enable the original ASUS implementation, not re-created gestures.
+Legacy edge actions and rotation still depend on ASUS/target-application support.
+Five-finger forwarding does not create a new Windows five-finger action.
+
+The bottom button zone defaults to 15% of touchpad height and is configurable
+from 0 to 100% in the app; 0 disables it. Contacts entering either half of that
+strip are excluded from native gesture counting until they lift. One pointing
+finger plus a button-zone finger therefore does not become two-finger scrolling.
+Once a native scrolling/pinch gesture starts, its participating fingers ignore
+the strip until each lifts. Entering the strip no longer cuts off an active
+gesture; newly resting button fingers still get excluded, and physical clicks
+activate the drag guard unless a separate reserved button finger is present
+alongside at least two gesture-area fingers. That combination allows two-hand
+scrolling while holding left/right click; a button finger plus only one other
+finger still does not scroll.
+The original ASUS driver still handles physical left/right clicks; resting a
+finger does not synthesize a click. Native CLI users can set
+`--button-zone-percent 20` (default 15) without a configuration file. The
+configuration key is `buttonZonePercent`; old settings files default to 15.
+The zone follows the same `--invert-y` sensor orientation as HID encoding.
+The `buttonZoneAtLowY` setting ("Reverse button-zone sensor Y" in the app)
+reverses just the zone interpretation if the live view shows the sensor bottom
+at the top. Reversed button-zone Y is the default for this ASUS sensor.
+Holding either physical mouse button blocks Windows gesture
+forwarding unless a separate reserved button contact accompanies at least two
+gesture contacts. Without that exception, after release,
+forwarding resumes once fewer than two fingers remain, avoiding an accidental
+scroll at the end of a drag.
+
+When using original ASUS multi-finger actions, the worker mutes those actions
+after observing a button-zone contact and keeps them muted until all fingers
+lift. Because ASUS consumes hardware before publishing the diagnostic feed,
+that suppression cannot guarantee interception of its first simultaneous
+contact frame. The native Windows path filters contacts before submission and
+does not have that race. Hardware testing of button-zone behavior is still needed.
+
+Changes are saved atomically to `%LOCALAPPDATA%/N56PrecisionBridge/settings.json`
+and applied after all fingers lift. If a disabled count interrupts a Windows
+gesture, forwarding resumes only after all contacts lift. Invalid configuration
+updates leave the last working configuration active and appear in the UI.
+Logs and status files are in the same directory. `worker.log` is size-bounded.
+Status updates are best-effort: Windows file-lock/access errors skip a telemetry
+update rather than terminating input forwarding. The next update retries.
+Native CLI behavior without `--config` still forwards all multi-finger counts,
+with the new button-zone and hold + tap filters applied.
+
+Hold + tap right-click is enabled by default: keep one finger down for at least
+50 ms, then tap a second finger for at most 250 ms, with no more than 2 mm of
+movement. The first finger must remain down when the second lifts. All three
+thresholds and the feature switch are configurable in the app. A third finger,
+excessive motion, or a long second-finger hold cancels the click. Repeated second
+taps work without lifting the first finger. A held physical mouse button also
+cancels the custom click to avoid right-clicking while dragging. The second tap may be in the button
+zone; the zone still prevents it from becoming a scrolling contact.
+
+Ordinary ASUS two-finger tapping is always suppressed. Starting native mode
+also disables Windows' documented **per-user** `TwoFingerTapEnabled` preference,
+including for other Precision Touchpads used by that Windows account. This
+preference intentionally persists after pausing/exiting, as requested; it can
+be re-enabled in Windows touchpad settings. Stationary two-finger pairs are
+forwarded immediately to Windows so placing fingers back down can cancel
+scroll momentum without movement. The tap tolerance still controls the custom
+right-click recognizer and when scrolling fingers gain the bottom-zone exemption;
+it no longer withholds native contact reports.
+Custom right-click uses a matched `SendInput` mouse-button down/up pair; it does
+not simulate keyboard shortcuts. Interactive gesture validation is still needed.
+
+The contact preview receives every sensor frame through the worker's stdout
+stream, separate from best-effort status files. The UI draws the latest frame
+every 16 ms while the Buttons page is visible; older render frames are not queued.
+The hold + tap timeline retains the last attempt's first-finger hold, second-finger
+duration, peak movement, active thresholds, and acceptance/rejection reason.
+
 ## Reverse engineering
 
 See [docs/reverse-engineering.md](docs/reverse-engineering.md) for binary hashes,

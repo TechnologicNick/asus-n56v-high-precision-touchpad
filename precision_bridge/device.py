@@ -49,6 +49,79 @@ class IoctlDevice:
         self.close()
 
 
+class ParentProcess:
+    """Gracefully stop the worker if its desktop owner exits unexpectedly."""
+    def __init__(self, pid):
+        self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.kernel.OpenProcess.argtypes = [w.DWORD, w.BOOL, w.DWORD]
+        self.kernel.OpenProcess.restype = w.HANDLE
+        self.kernel.WaitForSingleObject.argtypes = [w.HANDLE, w.DWORD]
+        self.kernel.WaitForSingleObject.restype = w.DWORD
+        self.kernel.CloseHandle.argtypes = [w.HANDLE]
+        self.kernel.CloseHandle.restype = w.BOOL
+        self.handle = self.kernel.OpenProcess(0x100000, False, pid)
+        if not self.handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def exited(self):
+        status = self.kernel.WaitForSingleObject(self.handle, 0)
+        if status == 0xffffffff:
+            raise ctypes.WinError(ctypes.get_last_error())
+        return status == 0
+
+    def close(self):
+        if self.handle:
+            self.kernel.CloseHandle(self.handle)
+            self.handle = None
+
+
+def suppress_windows_two_finger_tap():
+    """Explicit user preference: disable Windows' ordinary two-finger tap.
+
+    This documented setting is per Windows user, not per virtual device.
+    It is intentionally persistent, like changing the checkbox in Settings.
+    """
+    import winreg
+    key_name = r"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad"
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_name, 0, winreg.KEY_SET_VALUE) as key:
+        winreg.SetValueEx(key, "TwoFingerTapEnabled", 0, winreg.REG_DWORD, 0)
+    user = ctypes.WinDLL("user32", use_last_error=True)
+    user.SendMessageTimeoutW.argtypes = [w.HWND, w.UINT, ctypes.c_size_t, w.LPCWSTR, w.UINT, w.UINT, ctypes.POINTER(ctypes.c_size_t)]
+    user.SendMessageTimeoutW.restype = ctypes.c_size_t
+    result = ctypes.c_size_t()
+    user.SendMessageTimeoutW(0xffff, 0x1a, 0, "PrecisionTouchPad", 2, 1000, ctypes.byref(result))
+
+
+class MouseOutput:
+    def __init__(self):
+        class Mouse(ctypes.Structure):
+            _fields_ = [("dx", w.LONG), ("dy", w.LONG), ("data", w.DWORD), ("flags", w.DWORD), ("time", w.DWORD), ("extra", ctypes.c_size_t)]
+        class Payload(ctypes.Union):
+            _fields_ = [("mouse", Mouse), ("padding", ctypes.c_byte * 32)]
+        class Input(ctypes.Structure):
+            _fields_ = [("type", w.DWORD), ("payload", Payload)]
+        self.Input = Input
+        self.user = ctypes.WinDLL("user32", use_last_error=True)
+        self.user.SendInput.argtypes = [w.UINT, ctypes.POINTER(Input), ctypes.c_int]
+        self.user.SendInput.restype = w.UINT
+        self.user.GetAsyncKeyState.argtypes = [ctypes.c_int]
+        self.user.GetAsyncKeyState.restype = ctypes.c_short
+
+    def buttons_down(self):
+        return bool(self.user.GetAsyncKeyState(1) & 0x8000 or self.user.GetAsyncKeyState(2) & 0x8000)
+
+    def right_click(self):
+        inputs = (self.Input * 2)()
+        inputs[0].payload.mouse.flags = 0x0008
+        inputs[1].payload.mouse.flags = 0x0010
+        sent = self.user.SendInput(2, inputs, ctypes.sizeof(self.Input))
+        if sent != 2:
+            error = ctypes.get_last_error()
+            if sent == 1:
+                self.user.SendInput(1, ctypes.byref(inputs[1]), ctypes.sizeof(self.Input))
+            raise ctypes.WinError(error)
+
+
 class AsusSettings(IoctlDevice):
     """Volatile driver settings, recovered from AsusTP.sys 1.0.0.148.
 
@@ -78,6 +151,17 @@ class AsusSettings(IoctlDevice):
         struct.pack_into("<I", request, 0, 1)
         for index in range(5, 15):
             struct.pack_into("<I", request, 16 + 4 * index, 0)
+        self.ioctl(self.CODE, bytes(request))
+
+    def apply_gestures(self, values):
+        if self.original is None:
+            self.original = self.read()
+        request = bytearray(self.original)
+        struct.pack_into("<I", request, 0, 1)
+        for index, value in values.items():
+            if index not in range(1, 15) or value not in (0, 1):
+                raise ValueError("Unsupported ASUS gesture setting")
+            struct.pack_into("<I", request, 16 + 4 * index, value)
         self.ioctl(self.CODE, bytes(request))
 
     def restore(self):

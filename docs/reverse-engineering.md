@@ -163,9 +163,38 @@ reports the driver running. Its administrator control endpoint opens successfull
 Windows assigned instance `ROOT\SYSTEM\0002`, despite hardware ID
 `ROOT\N56PrecisionBridge`; installer and rollback discovery use the hardware ID.
 
-Unverified: simultaneous multi-finger capture, stable slot identities under
-crossing fingers, native pinch/scroll
-behavior, power transitions under a loaded driver, and absence of cursor drift
-while the ASUS driver has its gestures muted. Native gesture behavior has not
-yet been interactively tested. Do not treat compilation or
-successful installation as a gesture test.
+Subsequent interactive testing confirmed all five contact counts and native
+pinch, scrolling, and multi-finger gestures. The user reported the gestures
+working after the descriptor's button usage and configuration switch collection
+were aligned with Microsoft's sample. Driver diagnostics show Windows querying
+capabilities/certification and selecting mode 3 with surface reporting enabled.
+The exact original failure was not isolated to a single descriptor field.
+
+The individual category-0 DWORD names were recovered from the registry-writing
+function at API RVA `0x1bb0`: indices 1-4 single tap, double tap, second-tap move,
+and tap-again drag release; 5 two-finger tapping; 6 pan; 7 zoom; 8 rotate;
+9/10 three-finger up/down; 11 three-finger left/right; 12-14 top/left/right edge
+swipes. Indices 15 onward (touchpad enable, mouse detection, tray state) are
+preserved. The shared `gesture-catalog.json` records all fourteen gesture fields.
+
+The desktop worker applies the configured ASUS values directly to the volatile
+driver block, preserving one original snapshot across live updates. A live
+hybrid-profile smoke test verified exact restoration of all non-debug fields.
+Button-zone filtering applies before native report encoding; ASUS sees hardware
+before diagnostic publishing, so dynamically muting its multi-finger gestures
+cannot reliably intercept a first simultaneous frame. This limitation does not
+apply to native Windows forwarding.
+
+Unverified: stable slot identities under crossing fingers, power transitions,
+cursor drift with hybrid profiles, interactive button-zone/right-click behavior,
+and tray interactions. Unit tests cover routing, thresholds, contact releases,
+settings validation and restoration; they do not replace hardware validation.
+
+WinUI desktop startup testing exposed a packaging issue: SDK-style Publish
+omitted the generated merged `N56Precision.pri`. Native debug output identified
+failure to load the InfoBar default style from `generic.xaml`. Explicitly
+publishing the generated PRI resolved startup, and UI Automation enumerated the
+gesture switches and numeric controls in a running non-elevated UI-only build.
+The subsequent UI smoke test passed switch interaction, close-to-tray, tray
+message-handler reopen, and graceful UI-test exit. Physical icon clicks and
+actual button-zone/hold + tap recognition still need user validation.

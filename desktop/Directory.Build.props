@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <Copyright>Copyright (c) 2026 TechnologicNick</Copyright>
+    <Authors>TechnologicNick</Authors>
+    <PackageLicenseExpression>WTFPL</PackageLicenseExpression>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

@@ -93,16 +93,15 @@ public static class N56CodeIntegrity {
         if (!$device) { throw 'Installation did not create the bridge root device.' }
         $state.deviceInstance = $device.PNPDeviceID
         if ($device.ConfigManagerErrorCode -ne 0) { throw "Bridge device problem code: $($device.ConfigManagerErrorCode)" }
-        $python = Join-Path $projectRoot '.venv\Scripts\python.exe'
-        Push-Location $projectRoot
-        try {
-            & $python (Join-Path $projectRoot 'tools\check_driver.py')
+        $worker = Join-Path $projectRoot 'artifacts\desktop\worker\N56Precision.Worker.exe'
+        if (Test-Path -LiteralPath $worker) {
+            & $worker --check-driver
             if ($LASTEXITCODE) { throw 'The driver loaded but its control interface could not be opened.' }
-        } finally { Pop-Location }
+        }
         $state.stage = 'installed'
         $state.error = ''
         Save-State
-        Write-Host 'Virtual driver installed. Run python -m precision_bridge --native from an administrator terminal.'
+        Write-Host 'Virtual driver installed. Grant your account access with tools/set-driver-user-access.ps1, then launch N56Precision.exe normally.'
     }
 } catch {
     if ($state) { $state.stage = 'failed'; $state.error = $_.Exception.Message; Save-State }

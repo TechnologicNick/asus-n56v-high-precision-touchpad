@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><Version>0.2.0-preview.1</Version></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../N56Precision.Core/N56Precision.Core.csproj" /></ItemGroup>
+</Project>

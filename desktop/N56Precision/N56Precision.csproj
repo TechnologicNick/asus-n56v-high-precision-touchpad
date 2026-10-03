@@ -15,8 +15,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableMsixTooling>false</EnableMsixTooling>
+    <Version>0.2.0-preview.1</Version>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Settings.cs" />
+    <ProjectReference Include="../N56Precision.Core/N56Precision.Core.csproj" GlobalPropertiesToRemove="ApplicationManifest;PublishDir" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250602001" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
     <Content Include="../../gesture-catalog.json" Link="gesture-catalog.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

@@ -12,38 +12,32 @@ public sealed class BridgeWorker
     private Process? process;
     private readonly string stopPath = Path.Combine(Settings.DirectoryPath, $"stop-{Environment.ProcessId}");
     private readonly string statusPath = Path.Combine(Settings.DirectoryPath, $"status-{Environment.ProcessId}.json");
-    private readonly string projectRoot;
     public bool Running => process is { HasExited: false };
+    public bool DesiredRunning { get; private set; }
+    private int retryCount;
+    private DateTime retryAfter;
     public string LastError { get; private set; } = "";
     public string LogPath => Path.Combine(Settings.DirectoryPath, "worker.log");
-    public BridgeWorker()
-    {
-        projectRoot = FindProject();
-    }
-    private static string FindProject()
-    {
-        var requested = Environment.GetEnvironmentVariable("N56_BRIDGE_ROOT");
-        if (requested is not null && File.Exists(Path.Combine(requested, "precision_bridge", "__main__.py"))) return requested;
-        for (DirectoryInfo? directory = new(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-            if (File.Exists(Path.Combine(directory.FullName, "precision_bridge", "__main__.py"))) return directory.FullName;
-        throw new DirectoryNotFoundException("Cannot find precision_bridge. Keep the app inside this project, or set N56_BRIDGE_ROOT.");
-    }
     public void Start()
     {
         if (Running) return;
+        DesiredRunning = true; retryCount = 0; StartProcess();
+    }
+    private void StartProcess()
+    {
         process?.Dispose();
         Directory.CreateDirectory(Settings.DirectoryPath);
         File.Delete(stopPath);
         File.Delete(statusPath);
         LastError = "";
-        var python = Path.Combine(projectRoot, ".venv", "Scripts", "python.exe");
-        if (!File.Exists(python)) throw new FileNotFoundException("Project Python environment is missing.", python);
-        var start = new ProcessStartInfo(python) { WorkingDirectory = projectRoot, UseShellExecute = false,
+        var executable = Path.Combine(AppContext.BaseDirectory, "worker", "N56Precision.Worker.exe");
+        if (!File.Exists(executable)) throw new FileNotFoundException("C# worker is missing. Reinstall the complete desktop package.", executable);
+        var start = new ProcessStartInfo(executable) { WorkingDirectory = AppContext.BaseDirectory, UseShellExecute = false,
             CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var argument in new[] { "-u", "-m", "precision_bridge", "--native", "--config", Settings.FilePath,
+        foreach (var argument in new[] { "--native", "--config", Settings.FilePath,
             "--stop-file", stopPath, "--status-file", statusPath, "--parent-pid", Environment.ProcessId.ToString(), "--preview-stream" }) start.ArgumentList.Add(argument);
         process = new Process { StartInfo = start };
-        File.WriteAllText(LogPath, $"Started {DateTime.Now:O}\n");
+        AppendLog($"Started C# worker {DateTime.Now:O}");
         lock (previewLock) preview = null;
         process.OutputDataReceived += (_, e) =>
         {
@@ -59,6 +53,7 @@ public sealed class BridgeWorker
         process.Start();
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
+        retryAfter = DateTime.UtcNow.AddSeconds(5);
     }
     private readonly object logLock = new();
     private void AppendLog(string text)
@@ -75,6 +70,7 @@ public sealed class BridgeWorker
     }
     public async Task<bool> StopAsync()
     {
+        DesiredRunning = false;
         if (!Running) return true;
         File.WriteAllText(stopPath, "stop");
         var stopped = process!.WaitForExitAsync();
@@ -83,6 +79,14 @@ public sealed class BridgeWorker
     }
     public string Status()
     {
+        if (!Running && DesiredRunning && retryCount < 12 && DateTime.UtcNow >= retryAfter)
+        {
+            retryCount++;
+            try { StartProcess(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+            { LastError = error.Message; retryAfter = DateTime.UtcNow.AddSeconds(5); }
+        }
+        if (!Running && DesiredRunning && retryCount < 12) return "Waiting for the ASUS companion or driver (startup retry)…\n" + LastError;
         if (!Running) return string.IsNullOrEmpty(LastError) ? "Paused — ASUS preferences restored." : "Stopped: " + LastError;
         try
         {

@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
  <ItemGroup>
-  <Compile Include="../N56Precision/Settings.cs" Link="Settings.cs" />
+  <ProjectReference Include="../N56Precision.Core/N56Precision.Core.csproj" />
   <Content Include="../../gesture-catalog.json" Link="gesture-catalog.json" CopyToOutputDirectory="PreserveNewest" />
+  <Content Include="../../driver/report_descriptor.h" Link="report_descriptor.h" CopyToOutputDirectory="PreserveNewest" />
  </ItemGroup>
 </Project>

@@ -1,0 +1,11 @@
+<Project>
+  <!-- Pin only .NET Core, not Windows.SDK.NET.Ref (which has its own version).
+       The SDK's global RuntimeFrameworkVersion would incorrectly override both. -->
+  <Target Name="PinReleaseRuntime" BeforeTargets="ProcessFrameworkReferences" Condition="'$(SelfContained)' == 'true'">
+    <ItemGroup>
+      <FrameworkReference Condition="'%(FrameworkReference.Identity)' == 'Microsoft.NETCore.App'">
+        <RuntimeFrameworkVersion>8.0.31</RuntimeFrameworkVersion>
+      </FrameworkReference>
+    </ItemGroup>
+  </Target>
+</Project>

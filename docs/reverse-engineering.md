@@ -198,3 +198,27 @@ gesture switches and numeric controls in a running non-elevated UI-only build.
 The subsequent UI smoke test passed switch interaction, close-to-tray, tray
 message-handler reopen, and graceful UI-test exit. Physical icon clicks and
 actual button-zone/hold + tap recognition still need user validation.
+
+### C# runtime and release cleanup (0.2.0-preview.1)
+
+The preceding implementation notes are historical. The Python worker has been
+replaced by `desktop/N56Precision.Core` and `N56Precision.Worker`, keeping the
+same pipe commands, decoder framing, settings IOCTL and 35-byte HID reports.
+The regression suite now runs in C# with no Python requirement, including an
+independent descriptor parser and exhaustive single-byte stream splits.
+
+A live non-elevated C# smoke test opened both devices, enabled/stopped the pipe
+feed, submitted native reports and verified exact restoration of the eighteen
+non-debug ASUS DWORDs. A per-device SetupAPI security descriptor grants the
+selected user's SID read/write while preserving SYSTEM/Admin access; the
+kernel's default remains restrictive and its image did not need modification.
+Microsoft documents administrative per-device overrides for driver-supplied
+security descriptors. No ASUS ACL was changed.
+
+Stationary contacts are forwarded immediately for inertia cancellation. Windows
+10 was observed retaining its enabled two-finger tap state in memory even when
+the HKCU value was zero; toggling the real Settings checkbox refreshed that
+state. The setup helper changes only that checkbox. The custom right-click
+recognizer remains separate, with current configurable defaults 40/200 ms and
+2 mm. User validation confirmed the checkbox fix; broader hardware testing is
+still needed before a consumer release.

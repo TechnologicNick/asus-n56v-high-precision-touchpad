@@ -66,7 +66,7 @@ public sealed class MainWindow : Window
         navigation.SelectedItem = navigation.MenuItems[0]; Content = root;
         AppWindow.Closing += (_, e) => { if (!quitting) { e.Cancel = true; AppWindow.Hide(); } };
         tray = new TrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this), Show,
-            async () => await ToggleWorker(), async () => await Quit(), () => worker.Running);
+            async () => await ToggleWorker(), async () => await Quit(), () => worker.DesiredRunning);
         RefreshOwnership();
         if (!uiTest) TryAction(() => { settings.Save(); worker.Start(); });
         timer = DispatcherQueue.CreateTimer(); timer.Interval = TimeSpan.FromMilliseconds(200);
@@ -74,9 +74,9 @@ public sealed class MainWindow : Window
         {
             string detail = uiTest ? "UI test — hardware worker not started." : worker.Status(); diagnostics.Text = detail;
             status.Text = uiTest ? "UI test mode" : !worker.Running
-                ? string.IsNullOrEmpty(worker.LastError) ? "Paused · ASUS preferences restored" : "Bridge stopped · see Diagnostics"
+                ? detail.StartsWith("Waiting") ? "Waiting for the ASUS companion or driver" : string.IsNullOrEmpty(worker.LastError) ? "Paused · ASUS preferences restored" : "Bridge stopped · see Diagnostics"
                 : detail.StartsWith("Lift") ? "Lift all fingers to apply settings" : "Running · touchpad gestures active";
-            pause.Content = worker.Running ? "Pause bridge" : "Resume bridge";
+            pause.Content = worker.DesiredRunning ? "Pause bridge" : "Resume bridge";
         }; timer.Start();
         previewTimer = DispatcherQueue.CreateTimer(); previewTimer.Interval = TimeSpan.FromMilliseconds(16);
         previewTimer.Tick += (_, _) =>
@@ -115,7 +115,12 @@ public sealed class MainWindow : Window
         panel.Children.Add(profiles);
         panel.Children.Add(Text("Windows forwarding takes priority over ASUS actions for the same finger count. The ASUS tab shows which switches are overridden."));
         panel.Children.Add(Text("A button finger plus one pointing finger does not scroll. Two separate gesture fingers can scroll while another finger holds a button in the bottom strip."));
-        panel.Children.Add(Text("Closing this window keeps the app in the tray. Click the tray icon to reopen; right-click it to pause or exit.")); return panel;
+        panel.Children.Add(Text("Closing this window keeps the app in the tray. Click the tray icon to reopen; right-click it to pause or exit."));
+        string executable = Environment.ProcessPath!;
+        var startup = new ToggleSwitch { Header = "Start in the tray when I sign in", IsOn = !uiTest && StartupRegistration.IsEnabled(executable), IsEnabled = !uiTest };
+        startup.Toggled += (_, _) => TryAction(() => StartupRegistration.SetEnabled(executable, startup.IsOn)); panel.Children.Add(startup);
+        panel.Children.Add(Text("The app and C# worker run as your ordinary account. Driver installation and permission changes still require a one-time administrator step."));
+        return panel;
     }
     private StackPanel BuildWindows()
     {
@@ -152,7 +157,7 @@ public sealed class MainWindow : Window
         panel.Children.Add(Text("If a finger at the physical bottom appears near the top below, reverse the sensor Y. This changes only the button-zone interpretation, not Windows scrolling."));
         padStatus.Height = 64;
         panel.Children.Add(new Border { Child = pad, HorizontalAlignment = HorizontalAlignment.Left, BorderThickness = new Thickness(1), BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Gray) }); panel.Children.Add(padStatus);
-        panel.Children.Add(Text("Hold + tap right-click", 20)); panel.Children.Add(Text("Put one finger down, wait for the minimum delay, then briefly tap another while the first stays down. The default 50 ms delay accepts staggered taps without requiring a long hold. Simultaneous two-finger right-click stays disabled."));
+        panel.Children.Add(Text("Hold + tap right-click", 20)); panel.Children.Add(Text("Put one finger down, wait for the minimum delay, then briefly tap another while the first stays down. The default 40 ms delay accepts staggered taps without requiring a long hold. Simultaneous two-finger right-click stays disabled."));
         var enable = new ToggleSwitch { Header = "Enable hold + tap right-click", IsOn = settings.ChordRightClickEnabled };
         enable.Toggled += (_, _) => { settings.ChordRightClickEnabled = enable.IsOn; TryAction(settings.Save); }; panel.Children.Add(enable);
         AddNumber(panel, "Minimum delay between fingers (milliseconds)", settings.RightClickHoldMs, 0, 5000, value => settings.RightClickHoldMs = value);
@@ -257,7 +262,7 @@ public sealed class MainWindow : Window
     private async Task ToggleWorker()
     {
         if (busy) return; busy = true; pause.IsEnabled = false;
-        try { if (worker.Running) { if (!await worker.StopAsync()) throw new TimeoutException("Still restoring ASUS settings. Wait and try again."); } else worker.Start(); }
+        try { if (worker.DesiredRunning) { if (!await worker.StopAsync()) throw new TimeoutException("Still restoring ASUS settings. Wait and try again."); } else worker.Start(); }
         catch (Exception error) { TryAction(() => throw error); } finally { busy = false; pause.IsEnabled = true; }
     }
     private async Task Quit()

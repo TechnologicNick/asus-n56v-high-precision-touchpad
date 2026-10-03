@@ -1,256 +1,133 @@
-# ASUS N56V Precision Gesture Bridge
+# N56 Precision
 
-An experimental bridge for the N56VM's ELAN PS/2 touchpad. It reads actual
-contacts from ASUS Smart Gesture and sends multi-finger contacts to a virtual
-Windows Precision Touchpad HID device. Windows performs gesture recognition;
-this code never synthesizes Ctrl, plus, minus, keyboard shortcuts, or wheel zoom.
+A deliberately opinionated gesture bridge for the ASUS N56V/N56VM touchpad.
+It combines Windows-native scrolling, pinch and swipes with the familiar ASUS
+gestures, controlled from a WinUI 3 tray app.
 
-**Current status:** the test-signed x64 virtual driver is installed and running.
-Windows recognizes its HID touchpad, and its administrator control interface
-opens successfully. The root device instance is `ROOT\SYSTEM\0002`; its hardware
-ID is `ROOT\N56PrecisionBridge`. Native pinch/scroll behavior still needs an
-interactive test with the Python bridge running. This remains a development
-prototype.
+**0.2.0-preview.1 — developer preview, not a production-signed driver release.**
+Tested on an N56VM with Windows 10 x64 and the existing ASUS Smart Gesture
+package. Other hardware/driver combinations are not certified or claimed to work.
 
-## Run the working contact monitor
+The app and worker are now entirely C#. No Python, PyInstaller, Visual Studio
+or .NET installation is needed to run the complete self-contained app package.
+Only the virtual-driver installation and per-user permission setup require an
+administrator. The tray app itself runs as your ordinary account.
 
-From this directory in PowerShell:
+## What it does
 
-```powershell
-python -m precision_bridge --seconds 30
-```
+- Windows receives real multi-contact HID reports and recognizes native
+  scrolling, pinch and swipes. The native path does not synthesize zoom keys.
+- ASUS retains one-finger pointing/clicks and optional original gestures.
+  Fourteen ASUS switches and separate Windows forwarding switches for 2–5
+  fingers let you choose the mix. Windows takes priority for an enabled count.
+- Bottom 15% button fingers are excluded from gesture counting, with reversed
+  sensor Y by default. Active scrolling/pinch fingers can cross that boundary
+  without stopping. Two separate gesture fingers can scroll while another
+  finger holds a button in the strip; button + one pointing finger cannot scroll.
+- Ordinary two-finger right-click is disabled. Hold one finger for 40 ms, tap
+  another for no more than 200 ms, and move neither more than 2 mm to right-click.
+  All thresholds are configurable; the first finger must remain down.
+- A sensor-frame-speed preview and retained hold/tap timeline explain actual
+  timing, peak movement and rejection reasons. Stationary retouch reaches Windows
+  immediately, so you can stop scroll momentum without moving your fingers.
+- Closing hides to the tray. Startup at sign-in is optional in the Overview tab;
+  the installer enables it by default. Pause/exit restores the ASUS preferences.
 
-Move one, two, and three fingers, then pinch. The monitor prints frame totals
-grouped by the number of active contacts. Use `--json` to inspect coordinates.
-It depends on the installed ASUS driver and running `AsusTPCenter.exe`.
-No extra Python packages are required for capture or the bridge.
+Defaults match TechnologicNick's preferred hybrid: Windows for two/four fingers,
+ASUS for three, five-finger forwarding off, legacy ASUS edge gestures off. Your
+existing settings are preserved. Presets and individual switches can change this.
+Five-finger forwarding does not guarantee a separate Windows five-finger action.
+Original ASUS actions may still use their own keyboard shortcuts or depend on
+application support; they are not reimplemented by the bridge.
 
-Only one raw-data pipe client can connect at a time. If opening the pipe fails,
-close another contact monitor first. A connection error stops the program.
-Capture temporarily enables the companion's diagnostic feed; a normal exit or
-pipe disconnect sends the companion back to its normal settings. Keep ASUS
-Smart Gesture running: it provides both the feed and the existing cursor/clicks.
+## Requirements and installation
 
-## Native gesture implementation
+You need x64 Windows 10 build 19041+ and the compatible ASUS Smart Gesture
+driver/companion already installed and running. This is not a replacement for
+that package. The bridge depends on its validated raw-data pipe and settings
+layout; only one bridge/capture client can own the feed.
 
-```text
-ELAN PS/2 sensor → ASUS driver → ASUS raw-data pipes → Python bridge
-                                                     ↓
-                                         virtual HID driver → Windows gestures
-```
-
-The existing ASUS mouse supplies one-finger movement and physical clicks. The
-virtual device receives only interactions with two or more fingers. During native
-mode, the bridge temporarily disables the original ASUS multi-finger actions in
-the driver, then restores them on exit. The changes are volatile; the ASUS
-gesture preferences in the registry remain in place.
-
-After installing a signed development driver, run from an elevated terminal:
-
-```powershell
-python -m precision_bridge --native
-```
-
-Ctrl+C stops the bridge and releases virtual contacts. The driver also releases
-contacts on client disconnect, power transitions, and a 500 ms input stall.
-The driver endpoint is restricted to Administrators and SYSTEM.
-
-## Build
-
-The current workspace already has a built test-signed package under
-`artifacts/driver/`: `N56PrecisionBridge.sys`, `.inf`, and `.cat`.
-
-To reproduce it, use Visual Studio 2022's x64 C++ tools, a Windows SDK, and the
-WDK. These commands download a hash-verified WDK NuGet package into the workspace
-and build without installing the kit into Windows:
+For an extracted release package on a machine with the virtual driver installed:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/fetch-wdk.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-driver.ps1
-python -m unittest discover -s tests -v
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
 ```
 
-The build script defaults to this computer's SDK 10.0.22621.0 and the local WDK
-10.0.26100.0, using KMDF 1.15 for compatibility. This combination compiled here;
-Microsoft recommends matching SDK/WDK build versions for a supported build
-environment. Pass `-SdkRoot`, `-SdkVersion`, and `-WdkRoot` for another installation.
+Setup copies the app to `%LOCALAPPDATA%\Programs\N56Precision`, grants your
+specific Windows account access to the virtual driver through a one-time UAC
+helper, disables the actual Windows two-finger tap checkbox and starts in the
+tray. Accept the driver-permission prompt. Do not run the whole installer under
+another administrator account: setup is per-user. `-NoStartup` skips sign-in
+registration. Existing settings/logs remain in `%LOCALAPPDATA%\N56PrecisionBridge`.
 
-Installation is deliberately a separate step. An unsigned `.sys` cannot normally
-load on this Windows x64 installation. Development signing may require changing
-Windows boot security settings, installing a test certificate, and restarting.
-After approval, the development certificate was installed into Local Machine
-My, Root, and TrustedPublisher, and test signing was enabled for the next boot.
-Its thumbprint and installation stage are recorded in
-`artifacts/installation/state.json`; the certificate expires on January 3, 2027.
-Rebuilding produces an unsigned image again; rerun the installer to sign it.
+### Important: the preview driver
 
-For installation or verification, run this command from the project directory. It prompts
-for administrator access, checks the running Code Integrity mode, verifies the
-package signatures, and installs the root device only when test mode is active:
+The bundled driver is test-signed. A first installation of it requires deliberate
+developer setup and Windows Test Mode. The normal installer refuses to silently
+trust a test certificate. `Install.ps1 -DeveloperPreview` opts into trusting this
+preview signer **only if Test Mode is already active**; it never disables Secure
+Boot, HVCI or signature enforcement. See [development setup](docs/development.md)
+and the [release/security limitations](docs/release.md) before doing this.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/install-development-driver.ps1
-```
+A standard consumer release still needs a Microsoft-signed kernel package.
+The current ZIP is an explicitly labeled preview, not a workaround for that
+requirement. Signing credentials, private keys and original ASUS binaries are
+not distributed.
 
-The installation log and state are in `artifacts/installation/`. After installation,
-run `python -m precision_bridge --native` from an administrator terminal.
+## Using it
 
-The installer also updates an existing bridge device after a rebuild. Native
-mode prints Windows negotiation and submission counters. `mode=3`,
-`surface=True`, increasing `submitted`, and `last-status=0x00000000` mean that
-the virtual driver is forwarding reports successfully; these counters do not
-by themselves prove that Windows recognized a gesture. Lift all fingers after
-starting, then test two-finger scrolling on a long page and pinch in a browser.
-If neither works, include the `Windows touchpad:` lines in the next report.
+Click the tray icon to open the sidebar. Overview contains presets/startup;
+Windows and ASUS pages contain switches; Buttons & right-click contains the
+strip, live contacts and timing controls; Diagnostics contains status and logs.
+Changes save automatically and apply when all fingers lift. The app retries
+missing driver/ASUS startup for roughly one minute, then shows its last error.
 
-For rollback, stop the bridge and run:
+Physical button ownership stays with ASUS. Resting in the strip does not create
+a synthetic click. The custom hold + tap right-click uses a matched mouse-button
+down/up pair, not a keyboard shortcut. Release/disconnect/watchdog handling
+prevents the virtual driver retaining stuck contacts.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/remove-development-driver.ps1
-```
+Windows' two-finger tap preference is intentionally per-user, including other
+Precision Touchpads on that account, and stays off after pause/exit/uninstall.
+If it remains active after a bridge restart, change the actual Windows Touchpad
+checkbox or run `tools/disable-windows-two-finger-tap.ps1`; a registry write alone
+did not refresh the Windows 10 cache on the tested machine. This does not affect
+the bridge's independent hold + tap recognizer or momentum cancellation.
 
-This removes the independent virtual device and only this project's certificate.
-It disables test signing if this project enabled it, taking effect after another
-restart. Driver Store files may remain. The original ASUS touchpad driver is not
-replaced by this package. If a forced termination interrupts restoration, restart
-ASUS Smart Gesture or reboot.
+## Uninstall / rollback
 
-## Remaining hardware validation
+Exit from the tray first, then run the installed app's
+`setup/uninstall-app.ps1`. It removes only this app's sign-in entry and offers
+driver-permission rollback via UAC. App files, preferences and logs are retained
+for recovery; delete that dedicated app directory yourself if desired. No
+original ASUS driver is removed and no Windows tap preference is silently restored.
 
-- Interactive capture on this laptop has confirmed contact counts from zero
-  through five. Coordinate accuracy for each simultaneous contact still needs
-  checking if gesture recognition fails.
-- Contact IDs currently follow ASUS's slots. Stable slot identity through
-  crossing fingers and partial lifts still needs verification.
-- Native OS recognition, smooth pinch, scrolling, and three-finger gestures need
-  testing with the signed driver loaded. Disabling ASUS gestures may affect its
-  handling of pointer movement during multi-finger interactions; verify that
-  there is no cursor drift or duplicate action.
-- Surface size is derived from this laptop's reported geometry: 3420 × 2052
-  counts, 810 counts/inch, approximately 107.2 × 64.3 mm. Other hardware needs
-  descriptor calibration. `--invert-y` supports checking the axis orientation.
-- Diagnostic contact bytes beyond active/X/Y remain incompletely interpreted.
-  Palm rejection is not implemented in this bridge. Timing comes from arrival
-  time because the text feed does not include hardware timestamps.
-- This does not certify the old physical hardware or make it pass Microsoft's
-  Precision Touchpad hardware tests.
+Developer-driver/test-signing rollback is separate and documented in
+[development.md](docs/development.md). Do not remove another driver's certificate
+or disable Test Mode blindly on a shared development machine.
 
-## WinUI 3 tray application
-
-Build the unpackaged, self-contained x64 desktop application with the .NET 8
-SDK and Windows desktop/WinUI development components installed:
+## Build and test
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-desktop.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/test.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-release.ps1
 ```
 
-Launch `artifacts/desktop/N56Precision.exe` and accept the administrator prompt.
-Stop any manually running bridge first: the ASUS feed and virtual endpoint are
-exclusive. The app starts a hidden Python worker using this project's `.venv`.
-Keep the output within this project (or set `N56_BRIDGE_ROOT` to the project).
-`--tray` starts with the settings window hidden. Closing the window hides it;
-click the notification-area icon to reopen it. Right-click to pause/resume or
-exit. Pause and exit stop the worker gracefully and restore ASUS preferences.
-The sidebar separates Overview, Windows gestures, ASUS gestures, Buttons &
-right-click, and Diagnostics. The Buttons page includes a live contact view;
-orange contacts are reserved for buttons and green contacts are in the gesture area.
-If the app crashes, its worker notices the parent process exit and restores
-settings. No driver replacement, startup task, or login registration is added.
+See [development.md](docs/development.md) for toolchain, UI tests, optional live
+hardware tests and driver building. [reverse-engineering.md](docs/reverse-engineering.md)
+records the vendor protocol/settings evidence and historical development.
+The C# worker also supports `--help`, `--version`, `--check-driver`, non-injecting
+capture without `--native`, and `--native --seconds 30` for a bounded native run.
+Do not run it alongside the tray worker.
 
-All fourteen ASUS gesture settings have switches. Windows forwarding can be
-enabled independently for two, three, four, and five contacts. When Windows
-owns a finger count, ASUS gestures with that count are muted to avoid duplicate
-actions. Their switch choices are remembered, and the UI shows the override.
-The Hybrid preset uses Windows for two/four/five fingers and ASUS for three.
-The switches enable the original ASUS implementation, not re-created gestures.
-Legacy edge actions and rotation still depend on ASUS/target-application support.
-Five-finger forwarding does not create a new Windows five-finger action.
+The release builder runs tests and creates a curated ZIP with a SHA-256 file
+manifest, license and notices. It excludes proprietary ASUS assets, user settings,
+logs, certificates/private keys, Python, and development tools. No cloud service
+or network connection is used by the runtime.
 
-The bottom button zone defaults to 15% of touchpad height and is configurable
-from 0 to 100% in the app; 0 disables it. Contacts entering either half of that
-strip are excluded from native gesture counting until they lift. One pointing
-finger plus a button-zone finger therefore does not become two-finger scrolling.
-Once a native scrolling/pinch gesture starts, its participating fingers ignore
-the strip until each lifts. Entering the strip no longer cuts off an active
-gesture; newly resting button fingers still get excluded, and physical clicks
-activate the drag guard unless a separate reserved button finger is present
-alongside at least two gesture-area fingers. That combination allows two-hand
-scrolling while holding left/right click; a button finger plus only one other
-finger still does not scroll.
-The original ASUS driver still handles physical left/right clicks; resting a
-finger does not synthesize a click. Native CLI users can set
-`--button-zone-percent 20` (default 15) without a configuration file. The
-configuration key is `buttonZonePercent`; old settings files default to 15.
-The zone follows the same `--invert-y` sensor orientation as HID encoding.
-The `buttonZoneAtLowY` setting ("Reverse button-zone sensor Y" in the app)
-reverses just the zone interpretation if the live view shows the sensor bottom
-at the top. Reversed button-zone Y is the default for this ASUS sensor.
-Holding either physical mouse button blocks Windows gesture
-forwarding unless a separate reserved button contact accompanies at least two
-gesture contacts. Without that exception, after release,
-forwarding resumes once fewer than two fingers remain, avoiding an accidental
-scroll at the end of a drag.
+## License
 
-When using original ASUS multi-finger actions, the worker mutes those actions
-after observing a button-zone contact and keeps them muted until all fingers
-lift. Because ASUS consumes hardware before publishing the diagnostic feed,
-that suppression cannot guarantee interception of its first simultaneous
-contact frame. The native Windows path filters contacts before submission and
-does not have that race. Hardware testing of button-zone behavior is still needed.
-
-Changes are saved atomically to `%LOCALAPPDATA%/N56PrecisionBridge/settings.json`
-and applied after all fingers lift. If a disabled count interrupts a Windows
-gesture, forwarding resumes only after all contacts lift. Invalid configuration
-updates leave the last working configuration active and appear in the UI.
-Logs and status files are in the same directory. `worker.log` is size-bounded.
-Status updates are best-effort: Windows file-lock/access errors skip a telemetry
-update rather than terminating input forwarding. The next update retries.
-Native CLI behavior without `--config` still forwards all multi-finger counts,
-with the new button-zone and hold + tap filters applied.
-
-Hold + tap right-click is enabled by default: keep one finger down for at least
-50 ms, then tap a second finger for at most 250 ms, with no more than 2 mm of
-movement. The first finger must remain down when the second lifts. All three
-thresholds and the feature switch are configurable in the app. A third finger,
-excessive motion, or a long second-finger hold cancels the click. Repeated second
-taps work without lifting the first finger. A held physical mouse button also
-cancels the custom click to avoid right-clicking while dragging. The second tap may be in the button
-zone; the zone still prevents it from becoming a scrolling contact.
-
-Ordinary ASUS two-finger tapping is always suppressed. Starting native mode
-also disables Windows' documented **per-user** `TwoFingerTapEnabled` preference,
-including for other Precision Touchpads used by that Windows account. This
-preference intentionally persists after pausing/exiting, as requested; it can
-be re-enabled in Windows touchpad settings. Stationary two-finger pairs are
-forwarded immediately to Windows so placing fingers back down can cancel
-scroll momentum without movement. The tap tolerance still controls the custom
-right-click recognizer and when scrolling fingers gain the bottom-zone exemption;
-it no longer withholds native contact reports.
-Custom right-click uses a matched `SendInput` mouse-button down/up pair; it does
-not simulate keyboard shortcuts. Interactive gesture validation is still needed.
-
-The contact preview receives every sensor frame through the worker's stdout
-stream, separate from best-effort status files. The UI draws the latest frame
-every 16 ms while the Buttons page is visible; older render frames are not queued.
-The hold + tap timeline retains the last attempt's first-finger hold, second-finger
-duration, peak movement, active thresholds, and acceptance/rejection reason.
-
-## Reverse engineering
-
-See [docs/reverse-engineering.md](docs/reverse-engineering.md) for binary hashes,
-addresses, packet layouts, evidence, and unresolved questions.
-
-For static inspection only:
-
-```powershell
-python -m pip install -r requirements-analysis.txt
-python tools/inspect_pe.py 'ASUS Smart Gesture/AsTPCenter/x64/AsusTPApi.dll' --brief
-```
-
-The supplied proprietary binaries are inspected, not patched or redistributed.
-The bridge uses its own Win32 calls and does not load the ASUS API DLL.
-
-References: Microsoft's [Precision Touchpad collections](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-required-hid-top-level-collections),
-[contact/feature report requirements](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-windows-precision-touchpad-collection),
-[VHF input reporting](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/vhf/nf-vhf-vhfreadreportsubmit),
-and [WDK setup](https://learn.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk).
+WTFPL v2 (Do What The Fuck You Want To Public License) — Copyright (c) 2026 TechnologicNick. See [LICENSE](LICENSE) and
+[third-party notices](THIRD-PARTY-NOTICES.md). ASUS and Microsoft components retain
+their own ownership/licenses. This project is not affiliated with ASUS or Microsoft.
